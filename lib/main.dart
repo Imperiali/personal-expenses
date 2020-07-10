@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import './widgets/chart.dart';
@@ -18,22 +21,19 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.green,
         accentColor: Colors.purple,
         fontFamily: 'Quicksand',
-        errorColor: Color.fromRGBO(200, 100, 0, 1),
+        errorColor: Color.fromRGBO(240, 0, 0, 0.8),
         textTheme: ThemeData.light().textTheme.copyWith(
-          headline6: TextStyle(
-            fontFamily: 'OpenSans',
-            fontSize: 18,
-            fontWeight: FontWeight.bold
-          ),
-          button: TextStyle(color: Colors.white)
-        ),
-        appBarTheme: AppBarTheme(textTheme: ThemeData.light()
-          .textTheme.copyWith(headline6: TextStyle(
-              fontFamily: 'OpenSans',
-              fontSize: 20,
-              fontWeight: FontWeight.bold
-        ))
-        ),
+            headline6: TextStyle(
+                fontFamily: 'OpenSans',
+                fontSize: 18,
+                fontWeight: FontWeight.bold),
+            button: TextStyle(color: Colors.white)),
+        appBarTheme: AppBarTheme(
+            textTheme: ThemeData.light().textTheme.copyWith(
+                headline6: TextStyle(
+                    fontFamily: 'OpenSans',
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold))),
       ),
       home: MyHomePage(),
     );
@@ -48,23 +48,25 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   final List<Transaction> _userTransactions = [];
 
+  bool _showChart = false;
+
   List<Transaction> get _recentTransactions {
     return _userTransactions.where((tx) {
-        return tx.date.isAfter(
-          DateTime.now().subtract(Duration(days: 7)));
-      }).toList();
+      return tx.date.isAfter(DateTime.now().subtract(Duration(days: 7)));
+    }).toList();
   }
 
-  void _addNewTransaction(String txTitle,double txAmount, DateTime chosenDate) {
+  void _addNewTransaction(
+      String txTitle, double txAmount, DateTime chosenDate) {
     final newTx = Transaction(
-      title: txTitle,
-      amount: txAmount,
-      date: chosenDate,
-      id: DateTime.now().toString());
+        title: txTitle,
+        amount: txAmount,
+        date: chosenDate,
+        id: DateTime.now().toString());
 
     setState(() {
-        _userTransactions.add(newTx);
-      });
+      _userTransactions.add(newTx);
+    });
   }
 
   void _deleteTransaction(String id) {
@@ -74,36 +76,106 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _startAddNewTransation(BuildContext ctx) {
-    showModalBottomSheet( context: ctx,builder: (_) => NewTransaction(_addNewTransaction));
+    showModalBottomSheet(
+        context: ctx, builder: (_) => NewTransaction(_addNewTransaction));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Personal Expenses'),
-        actions: <Widget>[
-          IconButton(
-            icon: Icon(Icons.add),
-            onPressed: () => _startAddNewTransation(context),
+    final _mediaQuery = MediaQuery.of(context);
+    final _isLandscape = _mediaQuery.orientation == Orientation.landscape;
+
+    final PreferredSizeWidget _appBar = Platform.isIOS
+        ? CupertinoNavigationBar(
+            middle: Text('Personal Expenses'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                GestureDetector(
+                  child: Icon(CupertinoIcons.add),
+                  onTap: () => _startAddNewTransation(context),
+                )
+              ],
+            ),
           )
+        : AppBar(
+            title: Text('Personal Expenses'),
+            actions: <Widget>[
+              IconButton(
+                icon: Icon(Icons.add),
+                onPressed: () => _startAddNewTransation(context),
+              )
+            ],
+          );
+
+    final txListWidget = Container(
+        height: (_mediaQuery.size.height -
+                _appBar.preferredSize.height -
+                _mediaQuery.padding.top) *
+            0.7,
+        child: TransactionList(_userTransactions, _deleteTransaction));
+
+    final _pageBody = SafeArea(
+        child: SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          if (_isLandscape)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text(
+                  'Show Chart',
+                  style: Theme.of(context).textTheme.headline6,
+                ),
+                Switch.adaptive(
+                  activeColor: Theme.of(context).accentColor,
+                  value: _showChart,
+                  onChanged: (val) {
+                    setState(() {
+                      _showChart = val;
+                    });
+                  },
+                )
+              ],
+            ),
+          if (!_isLandscape)
+            Container(
+                height: (_mediaQuery.size.height -
+                        _appBar.preferredSize.height -
+                        _mediaQuery.padding.top) *
+                    0.3,
+                child: Chart(_recentTransactions)),
+          if (!_isLandscape) txListWidget,
+          if (_isLandscape)
+            _showChart
+                ? Container(
+                    height: (_mediaQuery.size.height -
+                            _appBar.preferredSize.height -
+                            _mediaQuery.padding.top) *
+                        0.7,
+                    child: Chart(_recentTransactions))
+                : txListWidget
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-//          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Chart(_recentTransactions),
-            TransactionList(_userTransactions, _deleteTransaction)
-          ],
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.add),
-        onPressed: () => _startAddNewTransation(context),
-      ),
-    );
+    ));
+
+    return Platform.isIOS
+        ? CupertinoPageScaffold(
+            child: _pageBody,
+            navigationBar: _appBar,
+          )
+        : Scaffold(
+            appBar: _appBar,
+            body: _pageBody,
+            floatingActionButtonLocation:
+                FloatingActionButtonLocation.centerFloat,
+            floatingActionButton: Platform.isIOS
+                ? Container()
+                : FloatingActionButton(
+                    child: Icon(Icons.add),
+                    onPressed: () => _startAddNewTransation(context),
+                  ),
+          );
   }
 }
